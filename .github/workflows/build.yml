@@ -5,25 +5,71 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      GRADLE_OPTS: -Xmx4g -Dorg.gradle.daemon=false
     steps:
+      # 1. Мой репозиторий (CatApk.zip)
       - uses: actions/checkout@v4
+
+      # 2. Исходники Catroid (Pocket Code) — публичный репозиторий, форк не обязателен
+      - uses: actions/checkout@v4
+        with:
+          repository: Catrobat/Catroid
+          path: catroid-src
+
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: 17
+
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: 8.9
-      - name: Unpack project
+
+      # 3. Собираем плеер Catroid
+      - name: Build Catroid player
+        run: |
+          cd catroid-src
+          chmod +x gradlew
+          ./gradlew assembleCatroidDebug --no-daemon
+
+      - name: Find player APK
+        run: |
+          APK=$(find catroid-src -path "*build/outputs/apk*" -name "*.apk" | head -n 1)
+          echo "Found: $APK"
+          mkdir -p out
+          cp "$APK" out/player_template.apk
+          ls -la out
+          echo "=== Содержимое плеера (для подгонки путей) ==="
+          unzip -l out/player_template.apk | grep -iE "AndroidManifest|assets/|ic_launcher|\.catrobat|standalone" | head -150 || true
+          echo "=== Манифест ==="
+          $(ls -d $ANDROID_HOME/build-tools/*/ | tail -n 1)aapt2 dump badging out/player_template.apk | head -30 || true
+
+      - name: Save player as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: player-template
+          path: out/player_template.apk
+
+      # 4. Мое приложение
+      - name: Unpack my app
         run: unzip -o CatApk.zip -d proj
-      - name: Create signing key
+
+      - name: Put player into my app assets
         run: |
           mkdir -p proj/app/src/main/assets
+          cp out/player_template.apk proj/app/src/main/assets/player_template.apk
+
+      - name: Create signing key
+        run: |
           keytool -genkeypair -alias key -keyalg RSA -keysize 2048 -validity 10000 \
             -storetype PKCS12 -keystore proj/app/src/main/assets/signing.p12 \
             -storepass android -keypass android -dname "CN=CatApk"
-      - name: Build
+
+      - name: Build my app
         run: cd proj && gradle assembleDebug --no-daemon
+
       - uses: actions/upload-artifact@v4
         with:
           name: CatApk
