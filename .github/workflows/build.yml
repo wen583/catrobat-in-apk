@@ -43,6 +43,19 @@ jobs:
           echo "=== buildScripts ==="
           ls buildScripts 2>/dev/null | head -50 || true
 
+      - name: Inspect standalone tasks
+        shell: bash
+        run: |
+          cd catroid-src
+          echo "=== build.gradle: flavor standalone (290-320) ==="
+          sed -n 290,320p catroid/build.gradle
+          echo "=== build.gradle: PROJECT_NAME и стартовые значения (125-150) ==="
+          sed -n 125,150p catroid/build.gradle
+          echo "=== standalone_apk_tasks.gradle ==="
+          sed -n 22,230p catroid/gradle/standalone_apk_tasks.gradle
+          echo "=== MainMenuActivity.kt (145-175) ==="
+          sed -n 145,175p catroid/src/main/java/org/catrobat/catroid/ui/MainMenuActivity.kt
+
       # 3. Собираем плеер Catroid
       - name: Build Catroid player
         shell: bash
