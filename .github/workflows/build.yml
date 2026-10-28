@@ -9,10 +9,8 @@ jobs:
     env:
       GRADLE_OPTS: -Xmx4g -Dorg.gradle.daemon=false
     steps:
-      # 1. Мой репозиторий (CatApk.zip)
       - uses: actions/checkout@v4
 
-      # 2. Исходники Catroid (Pocket Code) — публичный репозиторий, форк не обязателен
       - uses: actions/checkout@v4
         with:
           repository: Catrobat/Catroid
@@ -27,42 +25,23 @@ jobs:
         with:
           gradle-version: 8.9
 
-      # 2.5. Диагностика: как в Catroid устроен standalone
-      - name: Inspect Catroid standalone support
+      # Пустой "проект-пустышка": Catroid при сборке standalone скачивает проект по URL
+      - name: Prepare dummy project and local server
         shell: bash
         run: |
-          cd catroid-src
-          echo "=== Файлы со словом standalone (скрипты сборки) ==="
-          grep -rIl -i "standalone" --include=*.gradle --include=*.kts --include=*.properties --include=*.sh --include=*.py . 2>/dev/null | head -30 || true
-          echo "=== Строки в gradle ==="
-          grep -rIn -i "standalone\|apk_generator" --include=*.gradle --include=*.kts . 2>/dev/null | head -60 || true
-          echo "=== Манифест ==="
-          grep -rn -i "standalone" --include=AndroidManifest.xml . 2>/dev/null | head -20 || true
-          echo "=== Код ==="
-          grep -rIn "APK_GENERATOR\|isStandalone\|STANDALONE" --include=*.kt --include=*.java catroid/src/main 2>/dev/null | head -40 || true
-          echo "=== buildScripts ==="
-          ls buildScripts 2>/dev/null | head -50 || true
+          mkdir -p dummy && cd dummy
+          printf '%s' '<?xml version="1.0" encoding="UTF-8"?><program><header><programName>Player</programName></header></program>' > code.xml
+          zip dummy.catrobat code.xml
+          nohup python3 -m http.server 8000 > /dev/null 2>&1 &
+          sleep 2
+          curl -sI http://localhost:8000/dummy.catrobat | head -1
 
-      - name: Inspect standalone tasks
-        shell: bash
-        run: |
-          cd catroid-src
-          echo "=== build.gradle: flavor standalone (290-320) ==="
-          sed -n 290,320p catroid/build.gradle
-          echo "=== build.gradle: PROJECT_NAME и стартовые значения (125-150) ==="
-          sed -n 125,150p catroid/build.gradle
-          echo "=== standalone_apk_tasks.gradle ==="
-          sed -n 22,230p catroid/gradle/standalone_apk_tasks.gradle
-          echo "=== MainMenuActivity.kt (145-175) ==="
-          sed -n 145,175p catroid/src/main/java/org/catrobat/catroid/ui/MainMenuActivity.kt
-
-      # 3. Собираем плеер Catroid
-      - name: Build Catroid player
+      - name: Build Catroid standalone player
         shell: bash
         run: |
           cd catroid-src
           chmod +x gradlew
-          ./gradlew assembleCatroidDebug --no-daemon --console=plain 2>&1 | tee ../catroid-build.log
+          ./gradlew assembleStandaloneDebug -Pdownload=http://localhost:8000/dummy.catrobat -Psuffix=project --no-daemon --console=plain 2>&1 | tee ../catroid-build.log
 
       - name: Show Catroid error (only on failure)
         if: failure()
@@ -76,16 +55,18 @@ jobs:
           tail -n 25 catroid-build.log
 
       - name: Find player APK
+        shell: bash
         run: |
           APK=$(find catroid-src -path "*build/outputs/apk*" -name "*.apk" | head -n 1)
           echo "Found: $APK"
           mkdir -p out
           cp "$APK" out/player_template.apk
           ls -la out
-          echo "=== Содержимое плеера (для подгонки путей) ==="
-          unzip -l out/player_template.apk | grep -iE "AndroidManifest|assets/|ic_launcher|\.catrobat|standalone" | head -150 || true
+          echo "=== Нужные файлы в плеере ==="
+          unzip -l out/player_template.apk | grep -E "assets/[A-Za-z0-9_]+\.zip|nodpi|/icon|AndroidManifest" || true
           echo "=== Манифест ==="
-          $(ls -d $ANDROID_HOME/build-tools/*/ | tail -n 1)aapt2 dump badging out/player_template.apk | head -30 || true
+          AAPT=$(ls -d $ANDROID_HOME/build-tools/*/ | tail -n 1)aapt2
+          $AAPT dump badging out/player_template.apk | grep -E "^package|application-label:|application-icon|launchable" | head -10 || true
 
       - name: Save player as artifact
         uses: actions/upload-artifact@v4
@@ -93,7 +74,6 @@ jobs:
           name: player-template
           path: out/player_template.apk
 
-      # 4. Мое приложение
       - name: Unpack my app
         run: unzip -o CatApk.zip -d proj
 
