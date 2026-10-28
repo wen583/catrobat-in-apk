@@ -36,6 +36,19 @@ jobs:
           sleep 2
           curl -sI http://localhost:8000/dummy.catrobat | head -1
 
+      - name: Inspect standalone start code
+        shell: bash
+        run: |
+          cd catroid-src
+          F=catroid/src/main/java/org/catrobat/catroid/ui/MainMenuActivity.kt
+          echo "=== упоминания ==="
+          grep -n "prepareStandaloneProject\|START_PROJECT\|PROJECT_NAME" $F || true
+          L=$(grep -n "fun prepareStandaloneProject" $F | head -1 | cut -d: -f1)
+          echo "=== prepareStandaloneProject (строка $L) ==="
+          if [ -n "$L" ]; then sed -n "${L},$((L+60))p" $F; fi
+          echo "=== где ещё используется ==="
+          grep -rn "START_PROJECT\|BuildConfig.PROJECT_NAME" --include=*.kt --include=*.java catroid/src/main | head -30 || true
+
       - name: Build Catroid standalone player
         shell: bash
         run: |
