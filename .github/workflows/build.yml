@@ -29,10 +29,22 @@ jobs:
 
       # 3. Собираем плеер Catroid
       - name: Build Catroid player
+        shell: bash
         run: |
           cd catroid-src
           chmod +x gradlew
-          ./gradlew assembleCatroidDebug --no-daemon
+          ./gradlew assembleCatroidDebug --no-daemon --console=plain 2>&1 | tee ../catroid-build.log
+
+      - name: Show Catroid error (only on failure)
+        if: failure()
+        shell: bash
+        run: |
+          echo "===== ОШИБКИ КОМПИЛЯЦИИ (строки e:) ====="
+          grep -n "^e: " catroid-build.log | head -20 || true
+          echo "===== ПРИЧИНА ПАДЕНИЯ ====="
+          grep -n -A12 "What went wrong" catroid-build.log | head -40 || true
+          echo "===== КОНЕЦ ЛОГА ====="
+          tail -n 25 catroid-build.log
 
       - name: Find player APK
         run: |
