@@ -49,6 +49,20 @@ jobs:
           echo "=== где ещё используется ==="
           grep -rn "START_PROJECT\|BuildConfig.PROJECT_NAME" --include=*.kt --include=*.java catroid/src/main | head -30 || true
 
+      - name: Inspect standalone start flow
+        shell: bash
+        run: |
+          cd catroid-src
+          F=catroid/src/main/java/org/catrobat/catroid/ui/MainMenuActivity.kt
+          echo "=== MainMenuActivity.kt 100-215 ==="
+          sed -n 100,215p $F
+          echo "=== DEFAULT_ROOT_DIRECTORY ==="
+          grep -rn "DEFAULT_ROOT_DIRECTORY *=" --include=*.kt --include=*.java catroid/src/main | head -5 || true
+          echo "=== ProjectLoader ==="
+          PL=$(find catroid/src/main -name "ProjectLoader*" | head -1)
+          echo "$PL"
+          grep -n "fun \|Listener\|success\|catch" "$PL" | head -40 || true
+
       - name: Build Catroid standalone player
         shell: bash
         run: |
