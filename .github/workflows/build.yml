@@ -78,9 +78,18 @@ jobs:
         run: unzip -o CatApk.zip -d proj
 
       - name: Put player into my app assets
+        shell: bash
         run: |
           mkdir -p proj/app/src/main/assets
           cp out/player_template.apk proj/app/src/main/assets/player_template.apk
+          AAPT=$(ls -d $ANDROID_HOME/build-tools/*/ | tail -n 1)aapt2
+          $AAPT dump resources out/player_template.apk > res-dump.txt || true
+          echo "=== drawable/icon в таблице ресурсов ==="
+          grep -n "drawable/icon$" res-dump.txt | head -5 || true
+          HEX=$(grep -oE "0x7f[0-9a-f]{6} drawable/icon$" res-dump.txt | head -n 1 | cut -d' ' -f1)
+          echo "ICON HEX: $HEX"
+          if [ -n "$HEX" ]; then printf '%d' "$HEX" > proj/app/src/main/assets/icon_res_id.txt; fi
+          ls -la proj/app/src/main/assets
 
       - name: Create signing key
         run: |
