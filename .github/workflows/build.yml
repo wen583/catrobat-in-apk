@@ -36,19 +36,37 @@ jobs:
           sleep 2
           curl -sI http://localhost:8000/dummy.catrobat | head -1
 
-      - name: Inspect load flow
+      # Делаем плеер "говорящим": при ошибке загрузки проекта он покажет причину на экране
+      - name: Patch Catroid to show load errors
         shell: bash
         run: |
           cd catroid-src
-          F=catroid/src/main/java/org/catrobat/catroid/ui/MainMenuActivity.kt
-          echo "=== MainMenuActivity.kt 55-100 ==="
-          sed -n 55,100p $F
-          echo "=== FlavoredConstants ==="
-          FC=$(find catroid/src -name "FlavoredConstants*" | head -1)
-          echo "$FC"
-          grep -n "ROOT\|getExternal\|Environment\|filesDir" "$FC" | head -20 || true
-          echo "=== ProjectLoader.kt 40-110 ==="
-          sed -n 40,110p catroid/src/main/java/org/catrobat/catroid/io/asynctask/ProjectLoader.kt
+          python3 - <<'PY'
+          import re
+          def patch(path, old, new):
+              s = open(path, encoding="utf-8").read()
+              assert s.count(old) == 1, (path, old, s.count(old))
+              open(path, "w", encoding="utf-8").write(s.replace(old, new))
+
+          PL = "catroid/src/main/java/org/catrobat/catroid/io/asynctask/ProjectLoader.kt"
+          patch(PL, "        val TAG = ProjectLoader::class.java.simpleName",
+                "        val TAG = ProjectLoader::class.java.simpleName\n        @JvmField\n        var lastError: String = \"\"")
+          patch(PL, 'Log.e(ProjectLoader.TAG, "Cannot load project in " + projectDir.absolutePath, e)',
+                'Log.e(ProjectLoader.TAG, "Cannot load project in " + projectDir.absolutePath, e)\n'
+                '        ProjectLoader.lastError = e.toString() + " | cause: " + (e.cause?.toString() ?: "-") + " | " + e.stackTrace.take(3).joinToString(" ; ") + " | dir: " + projectDir.absolutePath')
+
+          MM = "catroid/src/main/java/org/catrobat/catroid/ui/MainMenuActivity.kt"
+          patch(MM, "    override fun onLoadFinished(success: Boolean) {",
+                '    override fun onLoadFinished(success: Boolean) {\n'
+                '        if (!success) android.app.AlertDialog.Builder(this).setMessage("LOAD FAILED: " + ProjectLoader.lastError).setPositiveButton("OK", null).show()')
+          patch(MM, "    private fun prepareStandaloneProject() {",
+                '    private fun prepareStandaloneProject() {\n'
+                '        android.widget.Toast.makeText(this, "STANDALONE: start", android.widget.Toast.LENGTH_SHORT).show()')
+          patch(MM, 'Log.e("STANDALONE", "Cannot unpack standalone project: ", e)',
+                'Log.e("STANDALONE", "Cannot unpack standalone project: ", e)\n'
+                '            android.app.AlertDialog.Builder(this).setMessage("UNPACK FAILED: " + e.toString()).setPositiveButton("OK", null).show()')
+          print("patched OK")
+          PY
 
       - name: Build Catroid standalone player
         shell: bash
